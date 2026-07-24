@@ -125,12 +125,15 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    @media (hover: hover) {
+    /* 💡 정밀한 포인터(마우스)가 있는 PC 환경에서만 Hover 작동하도록 엄격 제한 */
+    @media (hover: hover) and (pointer: fine) {
       .item-btn:hover:not(:disabled):not(.active) {
         background: #ff70a6;
         color: #fff;
       }
     }
+    
+    /* 모바일에서 누르는 순간의 피드백만 짧게 제공 */
     .item-btn:active:not(:disabled) {
       background: #ff477e; 
       transform: scale(0.95);
@@ -559,7 +562,7 @@
       nextFruitLevel = temp;
       updateNextCanvas();
       addScore(10);
-      document.getElementById('btn-next').blur(); // 클릭 후 포커스 해제
+      document.getElementById('btn-next').blur(); 
     }
 
     function toggleHammer() {
@@ -568,7 +571,7 @@
       isHammerActive = !isHammerActive;
       const btn = document.getElementById('btn-hammer');
       btn.classList.toggle('active', isHammerActive);
-      if (!isHammerActive) btn.blur(); // 비활성화 시 포커스 해제
+      if (!isHammerActive) btn.blur(); 
       canvas.style.cursor = isHammerActive ? 'pointer' : 'crosshair';
     }
 
@@ -578,11 +581,10 @@
       isBombActive = !isBombActive;
       const btn = document.getElementById('btn-bomb');
       btn.classList.toggle('active', isBombActive);
-      if (!isBombActive) btn.blur(); // 비활성화 시 포커스 해제
+      if (!isBombActive) btn.blur(); 
       canvas.style.cursor = isBombActive ? 'pointer' : 'crosshair';
     }
 
-    // 🫨 쉐이크 (종료 시 blur 강제 호출 추가)
     function useShake() {
       if (itemCounts.shake <= 0) return;
       itemCounts.shake--;
@@ -603,11 +605,10 @@
 
       setTimeout(() => {
         btn.classList.remove('active'); 
-        btn.blur(); // 모바일 포커스 강제 해제
+        btn.blur();
       }, 500);
     }
 
-    // ⚖️ 중력 틸트 (종료 시 blur 강제 호출 추가)
     function useGravityTilt() {
       if (itemCounts.tilt <= 0 || isTiltActive) return;
       
@@ -623,7 +624,7 @@
       tiltTimer = setTimeout(() => {
         isTiltActive = false;
         btn.classList.remove('active');
-        btn.blur(); // 모바일 포커스 강제 해제
+        btn.blur();
       }, 5000);
 
       addScore(20);
