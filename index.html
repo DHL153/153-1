@@ -73,7 +73,7 @@
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       cursor: crosshair;
-      /* 💡 캔버스 안에서 터치 스크롤이나 확대가 일어나는 것을 방지 */
+      /* 캔버스 터치 제스처 완벽 차단 */
       touch-action: none;
     }
 
@@ -253,6 +253,9 @@
     let isBombActive = false;
     let isTiltActive = false;
     let tiltTimer = null;
+    
+    // 💡 더블 터치 및 고스트 클릭 방지용 쿨다운 타이머 변수
+    let lastActionTime = 0; 
 
     const itemCounts = { next: 10, hammer: 10, bomb: 10, shake: 10, tilt: 10 };
 
@@ -318,7 +321,6 @@
       deadlineOverTime = 0;
       document.getElementById('warning-banner').style.display = 'none';
 
-      // 💡 마우스 및 터치 이벤트를 통합한 Pointer Event로 변경 (고스트 클릭 완벽 차단)
       canvas.addEventListener('pointerdown', handlePointerMove);
       canvas.addEventListener('pointermove', handlePointerMove);
       canvas.addEventListener('pointerup', handleCanvasClick);
@@ -456,28 +458,31 @@
 
     let currentMouseX = 180;
     
-    // 💡 포인터 이동 & 터치 위치 동기화
     function handlePointerMove(e) {
       const rect = canvas.getBoundingClientRect();
       currentMouseX = e.clientX - rect.left;
     }
 
-    // 💡 클릭 & 터치 끝났을 때의 동작 (아이템 소모 방해 차단)
     function handleCanvasClick(e) {
       if (isGameOver) return;
       
+      const now = Date.now();
+      // 💡 핵심 방어막: 마지막 행동으로부터 0.3초(300ms)가 지나지 않았다면 모든 터치를 무시함! (이중터치 방지)
+      if (now - lastActionTime < 300) return; 
+
       const rect = canvas.getBoundingClientRect();
       const clickX = e.clientX - rect.left;
       const clickY = e.clientY - rect.top;
 
-      // 아이템(뿅망치) 사용 중일 때 무조건 여기서 멈춤 (구슬 안 떨어짐)
       if (isHammerActive) {
         const bodies = Composite.allBodies(engine.world);
         const clickedBody = bodies.find(b => {
           if (b.isStatic || b.customLevel === undefined) return false;
           return Math.hypot(b.position.x - clickX, b.position.y - clickY) <= FRUITS[b.customLevel].radius;
         });
+        
         if (clickedBody) {
+          lastActionTime = now; // 💡 행동 성공 시 타이머 기록
           addScore((clickedBody.customLevel + 1) * 10);
           Composite.remove(engine.world, clickedBody);
           itemCounts.hammer--;
@@ -488,8 +493,8 @@
         return; 
       }
 
-      // 아이템(클린폭탄) 사용 중일 때 무조건 여기서 멈춤 (구슬 안 떨어짐)
       if (isBombActive) {
+        lastActionTime = now; // 💡 행동 성공 시 타이머 기록
         const bodies = Composite.allBodies(engine.world);
         const BOMB_RADIUS = 100;
         explosionEffects.push({ x: clickX, y: clickY, radius: 10, maxRadius: BOMB_RADIUS, alpha: 1 });
@@ -497,12 +502,14 @@
           if (b.isStatic || b.customLevel === undefined) return false;
           return Math.hypot(b.position.x - clickX, b.position.y - clickY) <= BOMB_RADIUS;
         });
+        
         let gainedScore = 0;
         targets.forEach(b => {
           gainedScore += (b.customLevel + 1) * 5;
           Composite.remove(engine.world, b);
         });
         addScore(gainedScore);
+        
         itemCounts.bomb--;
         document.getElementById('cnt-bomb').innerText = `${itemCounts.bomb}회`;
         if (itemCounts.bomb === 0) document.getElementById('btn-bomb').disabled = true;
@@ -510,9 +517,9 @@
         return; 
       }
 
-      // 아이템 비활성화일 때만 구슬 떨어짐
       if (!canDrop) return;
       
+      lastActionTime = now; // 💡 행동 성공 시 타이머 기록
       const fruit = FRUITS[currentFruitLevel];
       const dropX = Math.max(fruit.radius + 10, Math.min(350 - fruit.radius, clickX));
       const body = Bodies.circle(dropX, 40, fruit.radius, {
@@ -692,9 +699,12 @@
       engine.gravity.x = 0;
       engine.gravity.y = 1.2;
       lastTime = Date.now();
+      lastActionTime = 0; // 💡 재시작 시 쿨다운 타임 초기화
+      
       document.getElementById('score').innerText = '0';
       document.getElementById('game-over').style.display = 'none';
       document.getElementById('warning-banner').style.display = 'none';
+      
       Object.keys(itemCounts).forEach(k => itemCounts[k] = 10);
       document.querySelectorAll('.item-btn').forEach(btn => {
         btn.disabled = false;
