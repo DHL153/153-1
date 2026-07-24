@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>미소녀 수박 게임 - 5초 유예 & 자이로 에디션</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      background-color: #1a1a24;
+      color: #fff;
+      font-family: 'Pretendard', system-ui, -apple-system, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #game-container {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 360px;
+    }
+
+    /* 전체 게임 영역을 감싸는 통일된 테두리 프레임 */
+    #game-frame {
+      width: 100%;
+      border: 4px solid #ff70a6;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(255, 112, 166, 0.25);
+      background: #2b2b36;
+    }
+
+    /* 점수판 및 상단 UI */
+    #score-board {
+      width: 100%;
+      padding: 10px 16px;
+      background: #2b2b36;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 3px solid #ff70a6; /* 점수판과 캔버스 사이 구분선 */
+    }
+    .score-title { font-size: 11px; color: #ff70a6; font-weight: bold; letter-spacing: 1px; }
+    .score-value { font-size: 22px; font-weight: bold; color: #fff; }
+    .next-box { display: flex; align-items: center; gap: 8px; }
+    #next-canvas {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: 2px solid #ff70a6;
+      background-color: #fff;
+      image-rendering: pixelated;
+    }
+
+    /* 캔버스 및 레이아웃 */
+    #canvas-wrapper {
+      position: relative;
+      width: 360px;
+      height: 520px;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      cursor: crosshair;
+    }
+
+    /* 상단 데드라인 경고 배너 UI (기본 숨김) */
+    #warning-banner {
+      display: none;
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 0, 85, 0.95);
+      color: #fff;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+      border: 2px solid #fff;
+      box-shadow: 0 0 15px rgba(255, 0, 85, 0.8);
+      z-index: 5;
+      animation: blink 0.5s infinite alternate;
+    }
+    @keyframes blink {
+      from { opacity: 0.8; transform: translateX(-50%) scale(1); }
+      to { opacity: 1; transform: translateX(-50%) scale(1.05); }
+    }
+
+    /* 아이템 컨트롤 바 */
+    #item-bar {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      margin-top: 10px;
+      gap: 4px;
+    }
+    .item-btn {
+      flex: 1;
+      background: #2b2b36;
+      border: 2px solid #ff70a6;
+      color: #fff;
+      border-radius: 8px;
+      padding: 6px 2px;
+      font-size: 10px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+    .item-btn:hover:not(:disabled) {
+      background: #ff70a6;
+      color: #fff;
+    }
+    .item-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      border-color: #555;
+    }
+    .item-btn.active {
+      border-color: #00ffcc;
+      background: #3d2b4f;
+      box-shadow: 0 0 10px #00ffcc;
+      animation: pulse 0.8s infinite alternate;
+    }
+    .count {
+      font-size: 9px;
+      color: #ffbcda;
+      background: rgba(0,0,0,0.4);
+      padding: 1px 5px;
+      border-radius: 8px;
+    }
+
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.05); }
+    }
+
+    /* 게임 오버 레이어 */
+    #game-over {
+      display: none;
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.88);
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+    #game-over h1 { color: #ff477e; margin: 0 0 10px 0; font-size: 32px; }
+    #game-over p { font-size: 18px; margin-bottom: 20px; color: #fff; }
+    #restart-btn {
+      padding: 10px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      background: #ff70a6;
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    #restart-btn:hover { background: #ff477e; transform: scale(1.05); }
+  </style>
+</head>
+<body>
+
+  <div id="game-container">
+    <!-- 통합 프레임 구조 -->
+    <div id="game-frame">
+      <div id="score-board">
+        <div>
+          <div class="score-title">SCORE</div>
+          <div class="score-value" id="score">0</div>
+        </div>
+        <div class="next-box">
+          <div class="score-title">NEXT</div>
+          <canvas id="next-canvas" width="38" height="38"></canvas>
+        </div>
+      </div>
+
+      <div id="canvas-wrapper">
+        <div id="warning-banner">⚠️ 위험! <span id="warning-timer">5.0</span>초 남음</div>
+
+        <canvas id="game-canvas" width="360" height="520"></canvas>
+        
+        <div id="game-over">
+          <h1>GAME OVER</h1>
+          <p>최종 점수: <span id="final-score">0</span>점</p>
+          <button id="restart-btn" onclick="resetGame()">다시 시작</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 아이템 바 -->
+    <div id="item-bar">
+      <button class="item-btn" id="btn-next" onclick="useNextSwap()">
+        🔄 NEXT 교체
+        <span class="count" id="cnt-next">10회</span>
+      </button>
+      <button class="item-btn" id="btn-hammer" onclick="toggleHammer()">
+        🔨 뿅망치
+        <span class="count" id="cnt-hammer">10회</span>
+      </button>
+      <button class="item-btn" id="btn-bomb" onclick="toggleCleanBomb()">
+        💣 클린폭탄
+        <span class="count" id="cnt-bomb">10회</span>
+      </button>
+      <button class="item-btn" id="btn-shake" onclick="useShake()">
+        🫨 쉐이크
+        <span class="count" id="cnt-shake">10회</span>
+      </button>
+      <button class="item-btn" id="btn-tilt" onclick="useGravityTilt()">
+        ⚖️ 중력 틸트
+        <span class="count" id="cnt-tilt">10회</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const { Engine, Render, Runner, Bodies, Composite, Events, Body } = Matter;
+
+    // 게임 변수
+    let engine, render, runner;
+    let score = 0;
+    let currentFruitLevel = 0;
+    let nextFruitLevel = 0;
+    let canDrop = true;
+    let isGameOver = false;
+
+    // 아이템 활성 상태
+    let isHammerActive = false;
+    let isBombActive = false;
+
+    // 아이템 카운트 (10회씩)
+    const itemCounts = {
+      next: 10,
+      hammer: 10,
+      bomb: 10,
+      shake: 10,
+      tilt: 10
+    };
+
+    // 데드라인 유예 시스템 관련 변수
+    const DEADLINE_Y = 75;            // 데드라인 Y 높이
+    const DEADLINE_TIME_LIMIT = 5000; // 유예 시간: 5초 (5000ms)
+    let deadlineOverTime = 0;         // 초과 누적 시간
+    let lastTime = Date.now();
+
+    // 폭발 시각 이펙트 배열
+    let explosionEffects = [];
+
+    // 구체 레벨별 데이터
+    const FRUITS = [
+      { radius: 16, color: '#ffadad', name: 'Lv1' },
+      { radius: 24, color: '#ffd6a5', name: 'Lv2' },
+      { radius: 32, color: '#fdffb6', name: 'Lv3' },
+      { radius: 42, color: '#caffbf', name: 'Lv4' },
+      { radius: 54, color: '#9bf6ff', name: 'Lv5' },
+      { radius: 68, color: '#a0c4ff', name: 'Lv6' },
+      { radius: 84, color: '#bdb2ff', name: 'Lv7' },
+      { radius: 102, color: '#ffc6ff', name: 'Lv8' },
+      { radius: 122, color: '#fffffc', name: 'Lv9' },
+      { radius: 144, color: '#2ec4b6', name: 'Lv10' }
+    ];
+
+    const canvas = document.getElementById('game-canvas');
+    const nextCanvas = document.getElementById('next-canvas');
+    const nextCtx = nextCanvas.getContext('2d');
+
+    // 공통 점수 추가 함수
+    function addScore(points) {
+      score += points;
+      document.getElementById('score').innerText = score;
+    }
+
+    function init() {
+      engine = Engine.create();
+      engine.gravity.y = 1.2;
+
+      render = Render.create({
+        canvas: canvas,
+        engine: engine,
+        options: {
+          width: 360,
+          height: 520,
+          wireframes: false,
+          background: '#2b2b36',
+          pixelRatio: 1
+        }
+      });
+
+      Render.run(render);
+      runner = Runner.create();
+      Runner.run(runner, engine);
+
+      // 경계 벽 생성 (투명화 처리로 테두리 이중 두껍기 현상 제거)
+      const wallOptions = { isStatic: true, render: { visible: false } };
+      Composite.add(engine.world, [
+        Bodies.rectangle(5, 260, 10, 520, wallOptions),
+        Bodies.rectangle(355, 260, 10, 520, wallOptions),
+        Bodies.rectangle(180, 515, 360, 10, wallOptions)
+      ]);
+
+      Events.on(engine, 'collisionStart', handleCollision);
+      Events.on(render, 'afterRender', gameLoop);
+
+      currentFruitLevel = getRandomStartLevel();
+      nextFruitLevel = getRandomStartLevel();
+      updateNextCanvas();
+
+      // 시간 및 타이머 초기화
+      lastTime = Date.now();
+      deadlineOverTime = 0;
+      document.getElementById('warning-banner').style.display = 'none';
+
+      // 마우스 / 터치 이벤트 연동
+      canvas.addEventListener('click', handleCanvasClick);
+      canvas.addEventListener('mousemove', handleCanvasMouseMove);
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: true });
+      canvas.addEventListener('touchend', handleCanvasClick);
+
+      // 자이로 센서 활성화
+      initGyroscope();
+    }
+
+    function getRandomStartLevel() {
+      return Math.floor(Math.random() * 3);
+    }
+
+    function updateNextCanvas() {
+      nextCtx.clearRect(0, 0, 38, 38);
+      const fruit = FRUITS[nextFruitLevel];
+      nextCtx.beginPath();
+      nextCtx.arc(19, 19, 14, 0, Math.PI * 2);
+      nextCtx.fillStyle = fruit.color;
+      nextCtx.fill();
+      nextCtx.strokeStyle = '#ff70a6';
+      nextCtx.lineWidth = 2;
+      nextCtx.stroke();
+    }
+
+    // 메인 루프 (렌더링 및 유예 타이머 계산)
+    function gameLoop() {
+      const now = Date.now();
+      const dt = Math.min(now - lastTime, 100);
+      lastTime = now;
+
+      const ctx = render.context;
+
+      // 1. 도트 그래픽 렌더링
+      drawCustomFruits(ctx);
+
+      // 2. 폭발 이펙트 렌더링
+      drawExplosions(ctx);
+
+      // 3. 낙하 가이드선 및 대기 구체
+      if (canDrop && !isGameOver && !isHammerActive && !isBombActive) {
+        const mouseX = Math.max(20, Math.min(340, currentMouseX));
+        const fruit = FRUITS[currentFruitLevel];
+
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = 'rgba(255, 112, 166, 0.5)';
+        ctx.moveTo(mouseX, DEADLINE_Y);
+        ctx.lineTo(mouseX, 510);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath();
+        ctx.arc(mouseX, 35, fruit.radius, 0, Math.PI * 2);
+        ctx.fillStyle = fruit.color;
+        ctx.fill();
+        ctx.strokeStyle = '#ff70a6';
+        ctx.stroke();
+      }
+
+      // 4. 데드라인 표시선
+      ctx.beginPath();
+      ctx.moveTo(0, DEADLINE_Y);
+      ctx.lineTo(360, DEADLINE_Y);
+      ctx.strokeStyle = deadlineOverTime > 0 ? '#ff0055' : 'rgba(255, 112, 166, 0.6)';
+      ctx.lineWidth = deadlineOverTime > 0 ? 3 : 1;
+      ctx.stroke();
+
+      // 5. 데드라인 5초 유예 검사
+      if (!isGameOver) {
+        checkDeadlineGraceSystem(dt, now);
+      }
+    }
+
+    // 커스텀 구체 렌더링
+    function drawCustomFruits(ctx) {
+      const bodies = Composite.allBodies(engine.world);
+
+      ctx.save();
+      for (let body of bodies) {
+        if (body.customLevel !== undefined) {
+          const fruit = FRUITS[body.customLevel];
+          const pos = body.position;
+          const angle = body.angle;
+
+          ctx.translate(pos.x, pos.y);
+          ctx.rotate(angle);
+
+          // 구체 몸체
+          ctx.beginPath();
+          ctx.arc(0, 0, fruit.radius, 0, Math.PI * 2);
+          ctx.fillStyle = fruit.color;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#2b2b36';
+          ctx.stroke();
+
+          // 표정
+          ctx.fillStyle = '#2b2b36';
+          const eyeOffset = fruit.radius * 0.35;
+          const eyeSize = Math.max(2, fruit.radius * 0.1);
+          ctx.fillRect(-eyeOffset, -eyeSize, eyeSize, eyeSize * 1.5);
+          ctx.fillRect(eyeOffset - eyeSize, -eyeSize, eyeSize, eyeSize * 1.5);
+
+          ctx.fillStyle = '#ff477e';
+          const cheekSize = Math.max(3, fruit.radius * 0.15);
+          ctx.fillRect(-eyeOffset - 2, eyeSize, cheekSize, cheekSize);
+          ctx.fillRect(eyeOffset - 2, eyeSize, cheekSize, cheekSize);
+
+          ctx.rotate(-angle);
+          ctx.translate(-pos.x, -pos.y);
+        }
+      }
+      ctx.restore();
+    }
+
+    // 데드라인 유예 검사
+    function checkDeadlineGraceSystem(dt, now) {
+      const bodies = Composite.allBodies(engine.world);
+      let isOverflow = false;
+
+      for (let b of bodies) {
+        if (!b.isStatic && b.customLevel !== undefined) {
+          if (b.spawnTime && (now - b.spawnTime < 1000)) continue;
+
+          const fruitRadius = FRUITS[b.customLevel].radius;
+          if (b.position.y - fruitRadius <= DEADLINE_Y && Math.abs(b.velocity.y) < 0.3) {
+            isOverflow = true;
+            break;
+          }
+        }
+      }
+
+      const warningBanner = document.getElementById('warning-banner');
+      const warningTimer = document.getElementById('warning-timer');
+
+      if (isOverflow) {
+        deadlineOverTime += dt;
+        const remaining = Math.max(0, (DEADLINE_TIME_LIMIT - deadlineOverTime) / 1000);
+        warningTimer.innerText = remaining.toFixed(1);
+        warningBanner.style.display = 'block';
+
+        if (deadlineOverTime >= DEADLINE_TIME_LIMIT) {
+          triggerGameOver();
+        }
+      } else {
+        deadlineOverTime = Math.max(0, deadlineOverTime - dt * 2);
+        if (deadlineOverTime === 0) {
+          warningBanner.style.display = 'none';
+        }
+      }
+    }
+
+    let currentMouseX = 180;
+    function handleCanvasMouseMove(e) {
+      const rect = canvas.getBoundingClientRect();
+      currentMouseX = e.clientX - rect.left;
+    }
+    function handleTouchMove(e) {
+      if (e.touches.length > 0) {
+        const rect = canvas.getBoundingClientRect();
+        currentMouseX = e.touches[0].clientX - rect.left;
+      }
+    }
+
+    // 클릭 이벤트
+    function handleCanvasClick(e) {
+      if (isGameOver) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const clickX = (e.clientX || (e.changedTouches && e.changedTouches[0].clientX)) - rect.left;
+      const clickY = (e.clientY || (e.changedTouches && e.changedTouches[0].clientY)) - rect.top;
+
+      // 1. 🔨 뿅망치 모드
+      if (isHammerActive) {
+        const bodies = Composite.allBodies(engine.world);
+        const clickedBody = bodies.find(b => {
+          if (b.isStatic || b.customLevel === undefined) return false;
+          return Math.hypot(b.position.x - clickX, b.position.y - clickY) <= FRUITS[b.customLevel].radius;
+        });
+
+        if (clickedBody) {
+          const gainedScore = (clickedBody.customLevel + 1) * 10;
+          addScore(gainedScore);
+
+          Composite.remove(engine.world, clickedBody);
+          itemCounts.hammer--;
+          document.getElementById('cnt-hammer').innerText = `${itemCounts.hammer}회`;
+          if (itemCounts.hammer === 0) document.getElementById('btn-hammer').disabled = true;
+          toggleHammer();
+        }
+        return;
+      }
+
+      // 2. 💣 클린폭탄 모드
+      if (isBombActive) {
+        const bodies = Composite.allBodies(engine.world);
+        const BOMB_RADIUS = 100;
+
+        explosionEffects.push({ x: clickX, y: clickY, radius: 10, maxRadius: BOMB_RADIUS, alpha: 1 });
+
+        const targets = bodies.filter(b => {
+          if (b.isStatic || b.customLevel === undefined) return false;
+          return Math.hypot(b.position.x - clickX, b.position.y - clickY) <= BOMB_RADIUS;
+        });
+
+        let gainedScore = 0;
+        targets.forEach(b => {
+          gainedScore += (b.customLevel + 1) * 5;
+          Composite.remove(engine.world, b);
+        });
+        addScore(gainedScore);
+
+        itemCounts.bomb--;
+        document.getElementById('cnt-bomb').innerText = `${itemCounts.bomb}회`;
+        if (itemCounts.bomb === 0) document.getElementById('btn-bomb').disabled = true;
+        toggleCleanBomb();
+        return;
+      }
+
+      // 3. 일반 구체 투하
+      if (!canDrop) return;
+
+      const fruit = FRUITS[currentFruitLevel];
+      const dropX = Math.max(fruit.radius + 10, Math.min(350 - fruit.radius, clickX));
+
+      const body = Bodies.circle(dropX, 40, fruit.radius, {
+        restitution: 0.2,
+        friction: 0.1,
+        customLevel: currentFruitLevel,
+        spawnTime: Date.now(),
+        render: { visible: false }
+      });
+
+      Composite.add(engine.world, body);
+      canDrop = false;
+
+      setTimeout(() => {
+        currentFruitLevel = nextFruitLevel;
+        nextFruitLevel = getRandomStartLevel();
+        updateNextCanvas();
+        canDrop = true;
+      }, 400);
+    }
+
+    // 충돌 처리
+    function handleCollision(event) {
+      event.pairs.forEach(pair => {
+        const { bodyA, bodyB } = pair;
+        if (bodyA.customLevel !== undefined && bodyB.customLevel !== undefined) {
+          if (bodyA.customLevel === bodyB.customLevel) {
+            const currentLvl = bodyA.customLevel;
+            if (currentLvl < FRUITS.length - 1) {
+              const newLvl = currentLvl + 1;
+              const midX = (bodyA.position.x + bodyB.position.x) / 2;
+              const midY = (bodyA.position.y + bodyB.position.y) / 2;
+
+              Composite.remove(engine.world, [bodyA, bodyB]);
+
+              const newFruit = FRUITS[newLvl];
+              const mergedBody = Bodies.circle(midX, midY, newFruit.radius, {
+                restitution: 0.2,
+                friction: 0.1,
+                customLevel: newLvl,
+                spawnTime: Date.now(),
+                render: { visible: false }
+              });
+
+              Composite.add(engine.world, mergedBody);
+              addScore((newLvl + 1) * 2);
+            }
+          }
+        }
+      });
+    }
+
+    // 아이템 로직
+    function useNextSwap() {
+      if (itemCounts.next <= 0) return;
+      itemCounts.next--;
+      document.getElementById('cnt-next').innerText = `${itemCounts.next}회`;
+      if (itemCounts.next === 0) document.getElementById('btn-next').disabled = true;
+
+      const temp = currentFruitLevel;
+      currentFruitLevel = nextFruitLevel;
+      nextFruitLevel = temp;
+
+      updateNextCanvas();
+      addScore(10);
+    }
+
+    function toggleHammer() {
+      if (itemCounts.hammer <= 0 && !isHammerActive) return;
+      if (isBombActive) toggleCleanBomb();
+
+      isHammerActive = !isHammerActive;
+      const btn = document.getElementById('btn-hammer');
+      btn.classList.toggle('active', isHammerActive);
+      canvas.style.cursor = isHammerActive ? 'pointer' : 'crosshair';
+    }
+
+    function toggleCleanBomb() {
+      if (itemCounts.bomb <= 0 && !isBombActive) return;
+      if (isHammerActive) toggleHammer();
+
+      isBombActive = !isBombActive;
+      const btn = document.getElementById('btn-bomb');
+      btn.classList.toggle('active', isBombActive);
+      canvas.style.cursor = isBombActive ? 'pointer' : 'crosshair';
+    }
+
+    function useShake() {
+      if (itemCounts.shake <= 0) return;
+      itemCounts.shake--;
+      document.getElementById('cnt-shake').innerText = `${itemCounts.shake}회`;
+      if (itemCounts.shake === 0) document.getElementById('btn-shake').disabled = true;
+
+      const bodies = Composite.allBodies(engine.world);
+      bodies.forEach(b => {
+        if (!b.isStatic) {
+          Body.setVelocity(b, {
+            x: (Math.random() - 0.5) * 28,
+            y: -Math.random() * 18 - 8
+          });
+          Body.setAngularVelocity(b, (Math.random() - 0.5) * 0.4);
+        }
+      });
+
+      addScore(20);
+    }
+
+    function useGravityTilt() {
+      if (itemCounts.tilt <= 0) return;
+      itemCounts.tilt--;
+      document.getElementById('cnt-tilt').innerText = `${itemCounts.tilt}회`;
+      if (itemCounts.tilt === 0) document.getElementById('btn-tilt').disabled = true;
+
+      const tiltDir = Math.random() > 0.5 ? 1.5 : -1.5;
+      engine.gravity.x = tiltDir;
+
+      setTimeout(() => {
+        engine.gravity.x = 0;
+      }, 5000);
+
+      addScore(20);
+    }
+
+    function initGyroscope() {
+      if (window.DeviceOrientationEvent) {
+        window.addEventListener('deviceorientation', (e) => {
+          if (e.gamma !== null && !isGameOver) {
+            const tiltX = Math.max(-30, Math.min(30, e.gamma));
+            engine.gravity.x = (tiltX / 30) * 1.2;
+          }
+        });
+      }
+    }
+
+    function drawExplosions(ctx) {
+      for (let i = explosionEffects.length - 1; i >= 0; i--) {
+        const exp = explosionEffects[i];
+        ctx.beginPath();
+        ctx.arc(exp.x, exp.y, exp.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 71, 126, ${exp.alpha})`;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        exp.radius += 6;
+        exp.alpha -= 0.08;
+
+        if (exp.alpha <= 0) {
+          explosionEffects.splice(i, 1);
+        }
+      }
+    }
+
+    function triggerGameOver() {
+      isGameOver = true;
+      document.getElementById('final-score').innerText = score;
+      document.getElementById('game-over').style.display = 'flex';
+      document.getElementById('warning-banner').style.display = 'none';
+    }
+
+    function resetGame() {
+      Composite.clear(engine.world, false, true);
+      score = 0;
+      isGameOver = false;
+      deadlineOverTime = 0;
+      lastTime = Date.now();
+
+      document.getElementById('score').innerText = '0';
+      document.getElementById('game-over').style.display = 'none';
+      document.getElementById('warning-banner').style.display = 'none';
+
+      Object.keys(itemCounts).forEach(k => itemCounts[k] = 10);
+      document.querySelectorAll('.item-btn').forEach(btn => {
+        btn.disabled = false;
+        btn.classList.remove('active');
+      });
+      document.getElementById('cnt-next').innerText = '10회';
+      document.getElementById('cnt-hammer').innerText = '10회';
+      document.getElementById('cnt-bomb').innerText = '10회';
+      document.getElementById('cnt-shake').innerText = '10회';
+      document.getElementById('cnt-tilt').innerText = '10회';
+
+      const wallOptions = { isStatic: true, render: { visible: false } };
+      Composite.add(engine.world, [
+        Bodies.rectangle(5, 260, 10, 520, wallOptions),
+        Bodies.rectangle(355, 260, 10, 520, wallOptions),
+        Bodies.rectangle(180, 515, 360, 10, wallOptions)
+      ]);
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
