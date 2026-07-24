@@ -31,7 +31,7 @@
       width: 360px;
     }
 
-    /* 전체 게임 영역을 감싸는 통일된 테두리 프레임 */
+    /* 전체 게임 영역 테두리 프레임 */
     #game-frame {
       width: 100%;
       border: 4px solid #ff70a6;
@@ -49,7 +49,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 3px solid #ff70a6; /* 점수판과 캔버스 사이 구분선 */
+      border-bottom: 3px solid #ff70a6;
     }
     .score-title { font-size: 11px; color: #ff70a6; font-weight: bold; letter-spacing: 1px; }
     .score-value { font-size: 22px; font-weight: bold; color: #fff; }
@@ -78,7 +78,7 @@
       cursor: crosshair;
     }
 
-    /* 상단 데드라인 경고 배너 UI (기본 숨김) */
+    /* 상단 데드라인 경고 배너 UI */
     #warning-banner {
       display: none;
       position: absolute;
@@ -184,7 +184,6 @@
 <body>
 
   <div id="game-container">
-    <!-- 통합 프레임 구조 -->
     <div id="game-frame">
       <div id="score-board">
         <div>
@@ -210,7 +209,6 @@
       </div>
     </div>
 
-    <!-- 아이템 바 -->
     <div id="item-bar">
       <button class="item-btn" id="btn-next" onclick="useNextSwap()">
         🔄 NEXT 교체
@@ -238,7 +236,7 @@
   <script>
     const { Engine, Render, Runner, Bodies, Composite, Events, Body } = Matter;
 
-    // 게임 변수
+    // 게임 기본 변수
     let engine, render, runner;
     let score = 0;
     let currentFruitLevel = 0;
@@ -246,11 +244,13 @@
     let canDrop = true;
     let isGameOver = false;
 
-    // 아이템 활성 상태
+    // 아이템 상태
     let isHammerActive = false;
     let isBombActive = false;
+    let isTiltActive = false;
+    let tiltTimer = null;
 
-    // 아이템 카운트 (10회씩)
+    // 아이템 카운트
     const itemCounts = {
       next: 10,
       hammer: 10,
@@ -259,16 +259,16 @@
       tilt: 10
     };
 
-    // 데드라인 유예 시스템 관련 변수
-    const DEADLINE_Y = 75;            // 데드라인 Y 높이
-    const DEADLINE_TIME_LIMIT = 5000; // 유예 시간: 5초 (5000ms)
-    let deadlineOverTime = 0;         // 초과 누적 시간
+    // 데드라인 유예 시스템 관련
+    const DEADLINE_Y = 75;            
+    const DEADLINE_TIME_LIMIT = 5000; 
+    let deadlineOverTime = 0;         
     let lastTime = Date.now();
 
-    // 폭발 시각 이펙트 배열
+    // 이펙트
     let explosionEffects = [];
 
-    // 구체 레벨별 데이터
+    // 구체 정보
     const FRUITS = [
       { radius: 16, color: '#ffadad', name: 'Lv1' },
       { radius: 24, color: '#ffd6a5', name: 'Lv2' },
@@ -286,7 +286,6 @@
     const nextCanvas = document.getElementById('next-canvas');
     const nextCtx = nextCanvas.getContext('2d');
 
-    // 공통 점수 추가 함수
     function addScore(points) {
       score += points;
       document.getElementById('score').innerText = score;
@@ -294,6 +293,7 @@
 
     function init() {
       engine = Engine.create();
+      engine.gravity.x = 0;
       engine.gravity.y = 1.2;
 
       render = Render.create({
@@ -312,7 +312,6 @@
       runner = Runner.create();
       Runner.run(runner, engine);
 
-      // 경계 벽 생성 (투명화 처리로 테두리 이중 두껍기 현상 제거)
       const wallOptions = { isStatic: true, render: { visible: false } };
       Composite.add(engine.world, [
         Bodies.rectangle(5, 260, 10, 520, wallOptions),
@@ -327,18 +326,16 @@
       nextFruitLevel = getRandomStartLevel();
       updateNextCanvas();
 
-      // 시간 및 타이머 초기화
       lastTime = Date.now();
       deadlineOverTime = 0;
       document.getElementById('warning-banner').style.display = 'none';
 
-      // 마우스 / 터치 이벤트 연동
       canvas.addEventListener('click', handleCanvasClick);
       canvas.addEventListener('mousemove', handleCanvasMouseMove);
       canvas.addEventListener('touchmove', handleTouchMove, { passive: true });
       canvas.addEventListener('touchend', handleCanvasClick);
 
-      // 자이로 센서 활성화
+      // 자이로센서 초기화
       initGyroscope();
     }
 
@@ -358,7 +355,6 @@
       nextCtx.stroke();
     }
 
-    // 메인 루프 (렌더링 및 유예 타이머 계산)
     function gameLoop() {
       const now = Date.now();
       const dt = Math.min(now - lastTime, 100);
@@ -366,13 +362,9 @@
 
       const ctx = render.context;
 
-      // 1. 도트 그래픽 렌더링
       drawCustomFruits(ctx);
-
-      // 2. 폭발 이펙트 렌더링
       drawExplosions(ctx);
 
-      // 3. 낙하 가이드선 및 대기 구체
       if (canDrop && !isGameOver && !isHammerActive && !isBombActive) {
         const mouseX = Math.max(20, Math.min(340, currentMouseX));
         const fruit = FRUITS[currentFruitLevel];
@@ -393,7 +385,6 @@
         ctx.stroke();
       }
 
-      // 4. 데드라인 표시선
       ctx.beginPath();
       ctx.moveTo(0, DEADLINE_Y);
       ctx.lineTo(360, DEADLINE_Y);
@@ -401,13 +392,11 @@
       ctx.lineWidth = deadlineOverTime > 0 ? 3 : 1;
       ctx.stroke();
 
-      // 5. 데드라인 5초 유예 검사
       if (!isGameOver) {
         checkDeadlineGraceSystem(dt, now);
       }
     }
 
-    // 커스텀 구체 렌더링
     function drawCustomFruits(ctx) {
       const bodies = Composite.allBodies(engine.world);
 
@@ -421,7 +410,6 @@
           ctx.translate(pos.x, pos.y);
           ctx.rotate(angle);
 
-          // 구체 몸체
           ctx.beginPath();
           ctx.arc(0, 0, fruit.radius, 0, Math.PI * 2);
           ctx.fillStyle = fruit.color;
@@ -430,7 +418,6 @@
           ctx.strokeStyle = '#2b2b36';
           ctx.stroke();
 
-          // 표정
           ctx.fillStyle = '#2b2b36';
           const eyeOffset = fruit.radius * 0.35;
           const eyeSize = Math.max(2, fruit.radius * 0.1);
@@ -449,7 +436,6 @@
       ctx.restore();
     }
 
-    // 데드라인 유예 검사
     function checkDeadlineGraceSystem(dt, now) {
       const bodies = Composite.allBodies(engine.world);
       let isOverflow = false;
@@ -498,7 +484,6 @@
       }
     }
 
-    // 클릭 이벤트
     function handleCanvasClick(e) {
       if (isGameOver) return;
 
@@ -506,7 +491,6 @@
       const clickX = (e.clientX || (e.changedTouches && e.changedTouches[0].clientX)) - rect.left;
       const clickY = (e.clientY || (e.changedTouches && e.changedTouches[0].clientY)) - rect.top;
 
-      // 1. 🔨 뿅망치 모드
       if (isHammerActive) {
         const bodies = Composite.allBodies(engine.world);
         const clickedBody = bodies.find(b => {
@@ -515,9 +499,7 @@
         });
 
         if (clickedBody) {
-          const gainedScore = (clickedBody.customLevel + 1) * 10;
-          addScore(gainedScore);
-
+          addScore((clickedBody.customLevel + 1) * 10);
           Composite.remove(engine.world, clickedBody);
           itemCounts.hammer--;
           document.getElementById('cnt-hammer').innerText = `${itemCounts.hammer}회`;
@@ -527,7 +509,6 @@
         return;
       }
 
-      // 2. 💣 클린폭탄 모드
       if (isBombActive) {
         const bodies = Composite.allBodies(engine.world);
         const BOMB_RADIUS = 100;
@@ -553,7 +534,6 @@
         return;
       }
 
-      // 3. 일반 구체 투하
       if (!canDrop) return;
 
       const fruit = FRUITS[currentFruitLevel];
@@ -578,7 +558,6 @@
       }, 400);
     }
 
-    // 충돌 처리
     function handleCollision(event) {
       event.pairs.forEach(pair => {
         const { bodyA, bodyB } = pair;
@@ -609,7 +588,6 @@
       });
     }
 
-    // 아이템 로직
     function useNextSwap() {
       if (itemCounts.next <= 0) return;
       itemCounts.next--;
@@ -644,11 +622,15 @@
       canvas.style.cursor = isBombActive ? 'pointer' : 'crosshair';
     }
 
+    // 🫨 쉐이크 (0.5초간 버튼 활성화 애니메이션 후 자동 해제)
     function useShake() {
       if (itemCounts.shake <= 0) return;
       itemCounts.shake--;
       document.getElementById('cnt-shake').innerText = `${itemCounts.shake}회`;
       if (itemCounts.shake === 0) document.getElementById('btn-shake').disabled = true;
+
+      const btn = document.getElementById('btn-shake');
+      btn.classList.add('active');
 
       const bodies = Composite.allBodies(engine.world);
       bodies.forEach(b => {
@@ -661,31 +643,59 @@
         }
       });
 
+      // 0.5초 후 버튼 하이라이트 원상복구
+      setTimeout(() => {
+        btn.classList.remove('active');
+        btn.blur();
+      }, 500);
+
       addScore(20);
     }
 
+    // ⚖️ 중력 틸트 (5초 동안 활성화 후 자이로 및 버튼 자동 원상복구)
     function useGravityTilt() {
-      if (itemCounts.tilt <= 0) return;
+      if (itemCounts.tilt <= 0 || isTiltActive) return;
+      
       itemCounts.tilt--;
       document.getElementById('cnt-tilt').innerText = `${itemCounts.tilt}회`;
       if (itemCounts.tilt === 0) document.getElementById('btn-tilt').disabled = true;
 
-      const tiltDir = Math.random() > 0.5 ? 1.5 : -1.5;
-      engine.gravity.x = tiltDir;
+      isTiltActive = true;
+      const btn = document.getElementById('btn-tilt');
+      btn.classList.add('active');
 
-      setTimeout(() => {
+      // PC 및 센서 미반응 시 기본 초기 기울기
+      const tiltDirX = Math.random() > 0.5 ? 1.5 : -1.5;
+      engine.gravity.x = tiltDirX;
+
+      // 5초 후 자동 종료 및 원래 상태로 복구
+      if (tiltTimer) clearTimeout(tiltTimer);
+      tiltTimer = setTimeout(() => {
+        isTiltActive = false;
         engine.gravity.x = 0;
+        engine.gravity.y = 1.2; // 기본 수직 중력 복구
+        btn.classList.remove('active');
+        btn.blur();
       }, 5000);
 
       addScore(20);
     }
 
+    // 자이로센서 감지 (상하 + 좌우 동시 연동)
     function initGyroscope() {
       if (window.DeviceOrientationEvent) {
         window.addEventListener('deviceorientation', (e) => {
-          if (e.gamma !== null && !isGameOver) {
-            const tiltX = Math.max(-30, Math.min(30, e.gamma));
-            engine.gravity.x = (tiltX / 30) * 1.2;
+          if (isTiltActive && !isGameOver) {
+            if (e.gamma !== null && e.beta !== null) {
+              // 1. 좌우 기울기 (gamma: -30° ~ 30° 매핑)
+              const tiltX = Math.max(-30, Math.min(30, e.gamma));
+              engine.gravity.x = (tiltX / 30) * 1.5;
+
+              // 2. 상하 기울기 (beta: -30° ~ 60° 매핑)
+              // 보통 세워 쥐는 각도를 감안하여 범위 설정 (-30도 시 역중력/둥둥 뜸)
+              const tiltY = Math.max(-30, Math.min(60, e.beta));
+              engine.gravity.y = (tiltY / 30) * 1.2;
+            }
           }
         });
       }
@@ -713,6 +723,14 @@
 
     function triggerGameOver() {
       isGameOver = true;
+      isTiltActive = false;
+      if (tiltTimer) clearTimeout(tiltTimer);
+      engine.gravity.x = 0;
+      engine.gravity.y = 1.2;
+
+      document.getElementById('btn-tilt').classList.remove('active');
+      document.getElementById('btn-shake').classList.remove('active');
+
       document.getElementById('final-score').innerText = score;
       document.getElementById('game-over').style.display = 'flex';
       document.getElementById('warning-banner').style.display = 'none';
@@ -722,7 +740,11 @@
       Composite.clear(engine.world, false, true);
       score = 0;
       isGameOver = false;
-      deadlineOverTime = 0;
+      isTiltActive = false;
+      if (tiltTimer) clearTimeout(tiltTimer);
+      
+      engine.gravity.x = 0;
+      engine.gravity.y = 1.2;
       lastTime = Date.now();
 
       document.getElementById('score').innerText = '0';
