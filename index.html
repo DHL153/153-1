@@ -58,7 +58,7 @@
       border-radius: 50%;
       border: 2px solid #ff70a6;
       background-color: #fff;
-      image-rendering: pixelated;
+      /* 💡 고해상도 이미지 축소 시 깨짐 방지를 위해 pixelated 제거 */
     }
 
     #canvas-wrapper {
@@ -70,10 +70,9 @@
       display: block;
       width: 100%;
       height: 100%;
-      image-rendering: pixelated;
-      image-rendering: crisp-edges;
       cursor: crosshair;
       touch-action: none; 
+      /* 💡 여기도 crisp-edges, pixelated 제거하여 부드럽게 렌더링되게 함 */
     }
 
     #warning-banner {
@@ -156,14 +155,13 @@
       border-radius: 8px;
     }
 
-    /* 💡 타이머 표시용 CSS 추가 */
     .timer {
       font-size: 9px;
       color: #00ffcc;
       background: rgba(0, 0, 0, 0.6);
       padding: 1px 5px;
       border-radius: 8px;
-      display: none; /* 기본적으로 숨김 */
+      display: none; 
       font-weight: bold;
     }
 
@@ -244,7 +242,6 @@
       </button>
       <button class="item-btn" id="btn-tilt" onclick="useGravityTilt()">
         ⚖️ 중력 틸트
-        <!-- 💡 남은 횟수와 타이머가 교체되도록 span 추가 -->
         <span class="count" id="cnt-tilt">10회</span>
         <span class="timer" id="timer-tilt">5.0s</span>
       </button>
@@ -265,7 +262,6 @@
     let isBombActive = false;
     let isTiltActive = false;
     
-    // 💡 틸트 관련 변수 수정 (setTimeout 제거, 남은 시간 밀리초 단위 추적)
     let tiltRemainingTime = 0; 
     let lastActionTime = 0; 
 
@@ -279,17 +275,29 @@
     let explosionEffects = [];
 
     const FRUITS = [
-      { radius: 16, color: '#ffadad', name: 'Lv1' },
-      { radius: 24, color: '#ffd6a5', name: 'Lv2' },
-      { radius: 32, color: '#fdffb6', name: 'Lv3' },
-      { radius: 42, color: '#caffbf', name: 'Lv4' },
-      { radius: 54, color: '#9bf6ff', name: 'Lv5' },
-      { radius: 68, color: '#a0c4ff', name: 'Lv6' },
-      { radius: 84, color: '#bdb2ff', name: 'Lv7' },
-      { radius: 102, color: '#ffc6ff', name: 'Lv8' },
-      { radius: 122, color: '#fffffc', name: 'Lv9' },
-      { radius: 144, color: '#2ec4b6', name: 'Lv10' }
+      { radius: 16, name: 'Lv1' },
+      { radius: 24, name: 'Lv2' },
+      { radius: 32, name: 'Lv3' },
+      { radius: 42, name: 'Lv4' },
+      { radius: 54, name: 'Lv5' },
+      { radius: 68, name: 'Lv6' },
+      { radius: 84, name: 'Lv7' },
+      { radius: 102, name: 'Lv8' },
+      { radius: 122, name: 'Lv9' },
+      { radius: 144, name: 'Lv10' }
     ];
+
+    // 💡 10개의 512x512 이미지를 미리 메모리에 로드해둡니다.
+    const preloadedImages = [];
+    for (let i = 1; i <= 10; i++) {
+      const img = new Image();
+      const numStr = String(i).padStart(2, '0'); // 01, 02... 10
+      img.src = `images/lv${numStr}.png`;
+      preloadedImages.push(img);
+      
+      // 이미지가 로드될 때마다 넥스트 캔버스 업데이트 (첫 로딩 시 늦게 뜰 수 있음 방지)
+      img.onload = () => updateNextCanvas();
+    }
 
     const canvas = document.getElementById('game-canvas');
     const nextCanvas = document.getElementById('next-canvas');
@@ -354,14 +362,14 @@
 
     function updateNextCanvas() {
       nextCtx.clearRect(0, 0, 38, 38);
-      const fruit = FRUITS[nextFruitLevel];
-      nextCtx.beginPath();
-      nextCtx.arc(19, 19, 14, 0, Math.PI * 2);
-      nextCtx.fillStyle = fruit.color;
-      nextCtx.fill();
-      nextCtx.strokeStyle = '#ff70a6';
-      nextCtx.lineWidth = 2;
-      nextCtx.stroke();
+      const img = preloadedImages[nextFruitLevel];
+      
+      // 이미지가 로드된 경우에만 넥스트 캔버스에 그립니다.
+      if (img && img.complete) {
+        const drawRadius = 14; 
+        const drawSize = drawRadius * 2;
+        nextCtx.drawImage(img, 19 - drawRadius, 19 - drawRadius, drawSize, drawSize);
+      }
     }
 
     function gameLoop() {
@@ -371,15 +379,12 @@
 
       const ctx = render.context;
 
-      // 💡 틸트 활성화 시 타이머 처리 로직
       if (isTiltActive) {
         tiltRemainingTime -= dt;
         
         if (tiltRemainingTime > 0) {
-          // 남은 시간 텍스트 실시간 업데이트 (0.1초 단위)
           document.getElementById('timer-tilt').innerText = (tiltRemainingTime / 1000).toFixed(1) + 's';
         } else {
-          // 타이머 0초 도달 시 틸트 완전 종료
           isTiltActive = false;
           engine.gravity.x = 0;
           engine.gravity.y = 1.2;
@@ -388,7 +393,6 @@
           btn.classList.remove('active');
           btn.blur();
           
-          // UI 원상 복구 (타이머 숨기고 횟수 노출)
           document.getElementById('timer-tilt').style.display = 'none';
           document.getElementById('cnt-tilt').style.display = 'inline-block';
         }
@@ -403,6 +407,7 @@
       if (canDrop && !isGameOver && !isHammerActive && !isBombActive) {
         const mouseX = Math.max(20, Math.min(340, currentMouseX));
         const fruit = FRUITS[currentFruitLevel];
+        const img = preloadedImages[currentFruitLevel];
 
         ctx.beginPath();
         ctx.setLineDash([4, 4]);
@@ -412,12 +417,11 @@
         ctx.stroke();
         ctx.setLineDash([]);
 
-        ctx.beginPath();
-        ctx.arc(mouseX, 35, fruit.radius, 0, Math.PI * 2);
-        ctx.fillStyle = fruit.color;
-        ctx.fill();
-        ctx.strokeStyle = '#ff70a6';
-        ctx.stroke();
+        // 💡 대기 중인 구슬을 이미지로 렌더링
+        if (img && img.complete) {
+          const drawSize = fruit.radius * 2;
+          ctx.drawImage(img, mouseX - fruit.radius, 35 - fruit.radius, drawSize, drawSize);
+        }
       }
 
       ctx.beginPath();
@@ -438,28 +442,16 @@
           const fruit = FRUITS[body.customLevel];
           const pos = body.position;
           const angle = body.angle;
+          const img = preloadedImages[body.customLevel];
 
           ctx.translate(pos.x, pos.y);
           ctx.rotate(angle);
 
-          ctx.beginPath();
-          ctx.arc(0, 0, fruit.radius, 0, Math.PI * 2);
-          ctx.fillStyle = fruit.color;
-          ctx.fill();
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = '#2b2b36';
-          ctx.stroke();
-
-          ctx.fillStyle = '#2b2b36';
-          const eyeOffset = fruit.radius * 0.35;
-          const eyeSize = Math.max(2, fruit.radius * 0.1);
-          ctx.fillRect(-eyeOffset, -eyeSize, eyeSize, eyeSize * 1.5);
-          ctx.fillRect(eyeOffset - eyeSize, -eyeSize, eyeSize, eyeSize * 1.5);
-
-          ctx.fillStyle = '#ff477e';
-          const cheekSize = Math.max(3, fruit.radius * 0.15);
-          ctx.fillRect(-eyeOffset - 2, eyeSize, cheekSize, cheekSize);
-          ctx.fillRect(eyeOffset - 2, eyeSize, cheekSize, cheekSize);
+          // 💡 게임 영역의 구슬을 이미지로 렌더링
+          if (img && img.complete) {
+            const drawSize = fruit.radius * 2;
+            ctx.drawImage(img, -fruit.radius, -fruit.radius, drawSize, drawSize);
+          }
 
           ctx.rotate(-angle);
           ctx.translate(-pos.x, -pos.y);
@@ -531,31 +523,52 @@
           document.getElementById('cnt-hammer').innerText = `${itemCounts.hammer}회`;
           if (itemCounts.hammer === 0) document.getElementById('btn-hammer').disabled = true;
           toggleHammer();
+
+          bodies.forEach(b => {
+            if (!b.isStatic) Sleeping.set(b, false);
+          });
         }
         return; 
       }
 
       if (isBombActive) {
-        lastActionTime = now; 
         const bodies = Composite.allBodies(engine.world);
-        const BOMB_RADIUS = 100;
-        explosionEffects.push({ x: clickX, y: clickY, radius: 10, maxRadius: BOMB_RADIUS, alpha: 1 });
-        const targets = bodies.filter(b => {
+        
+        const clickedBody = bodies.find(b => {
           if (b.isStatic || b.customLevel === undefined) return false;
-          return Math.hypot(b.position.x - clickX, b.position.y - clickY) <= BOMB_RADIUS;
+          return Math.hypot(b.position.x - clickX, b.position.y - clickY) <= FRUITS[b.customLevel].radius;
         });
         
-        let gainedScore = 0;
-        targets.forEach(b => {
-          gainedScore += (b.customLevel + 1) * 5;
-          Composite.remove(engine.world, b);
-        });
-        addScore(gainedScore);
-        
-        itemCounts.bomb--;
-        document.getElementById('cnt-bomb').innerText = `${itemCounts.bomb}회`;
-        if (itemCounts.bomb === 0) document.getElementById('btn-bomb').disabled = true;
-        toggleCleanBomb();
+        if (clickedBody) {
+          lastActionTime = now; 
+          const targetLevel = clickedBody.customLevel;
+          
+          const targets = bodies.filter(b => !b.isStatic && b.customLevel === targetLevel);
+          
+          let gainedScore = 0;
+          targets.forEach(b => {
+            explosionEffects.push({ 
+              x: b.position.x, 
+              y: b.position.y, 
+              radius: 10, 
+              maxRadius: FRUITS[targetLevel].radius * 2, 
+              alpha: 1 
+            });
+            gainedScore += (b.customLevel + 1) * 5;
+            Composite.remove(engine.world, b);
+          });
+          
+          addScore(gainedScore);
+          
+          itemCounts.bomb--;
+          document.getElementById('cnt-bomb').innerText = `${itemCounts.bomb}회`;
+          if (itemCounts.bomb === 0) document.getElementById('btn-bomb').disabled = true;
+          toggleCleanBomb();
+
+          bodies.forEach(b => {
+            if (!b.isStatic) Sleeping.set(b, false);
+          });
+        }
         return; 
       }
 
@@ -668,12 +681,11 @@
       if (itemCounts.tilt === 0) document.getElementById('btn-tilt').disabled = true;
 
       isTiltActive = true;
-      tiltRemainingTime = 5000; // 💡 5초 카운트다운 할당
+      tiltRemainingTime = 5000; 
       
       const btn = document.getElementById('btn-tilt');
       btn.classList.add('active'); 
 
-      // UI 변경 (횟수 숨기기, 타이머 텍스트 띄우기)
       document.getElementById('cnt-tilt').style.display = 'none';
       const timerSpan = document.getElementById('timer-tilt');
       timerSpan.style.display = 'inline-block';
@@ -719,7 +731,7 @@
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 3;
         ctx.stroke();
-        exp.radius += 6;
+        exp.radius += 6; 
         exp.alpha -= 0.08;
         if (exp.alpha <= 0) explosionEffects.splice(i, 1);
       }
@@ -739,7 +751,6 @@
       tiltBtn.blur();
       shakeBtn.blur();
       
-      // 타이머 원상복구
       document.getElementById('timer-tilt').style.display = 'none';
       document.getElementById('cnt-tilt').style.display = 'inline-block';
 
@@ -763,7 +774,6 @@
       document.getElementById('game-over').style.display = 'none';
       document.getElementById('warning-banner').style.display = 'none';
       
-      // 타이머 원상복구
       document.getElementById('timer-tilt').style.display = 'none';
       document.getElementById('cnt-tilt').style.display = 'inline-block';
       
