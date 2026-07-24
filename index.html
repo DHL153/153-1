@@ -73,6 +73,8 @@
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       cursor: crosshair;
+      /* 💡 캔버스 안에서 터치 스크롤이나 확대가 일어나는 것을 방지 */
+      touch-action: none;
     }
 
     #warning-banner {
@@ -120,12 +122,10 @@
       flex-direction: column;
       align-items: center;
       gap: 3px;
-      /* 모바일 포커스 잔상 완벽 제거 옵션 */
       outline: none;
       -webkit-tap-highlight-color: transparent;
     }
 
-    /* 💡 정밀한 포인터(마우스)가 있는 PC 환경에서만 Hover 작동하도록 엄격 제한 */
     @media (hover: hover) and (pointer: fine) {
       .item-btn:hover:not(:disabled):not(.active) {
         background: #ff70a6;
@@ -133,7 +133,6 @@
       }
     }
     
-    /* 모바일에서 누르는 순간의 피드백만 짧게 제공 */
     .item-btn:active:not(:disabled) {
       background: #ff477e; 
       transform: scale(0.95);
@@ -319,10 +318,10 @@
       deadlineOverTime = 0;
       document.getElementById('warning-banner').style.display = 'none';
 
-      canvas.addEventListener('click', handleCanvasClick);
-      canvas.addEventListener('mousemove', handleCanvasMouseMove);
-      canvas.addEventListener('touchmove', handleTouchMove, { passive: true });
-      canvas.addEventListener('touchend', handleCanvasClick);
+      // 💡 마우스 및 터치 이벤트를 통합한 Pointer Event로 변경 (고스트 클릭 완벽 차단)
+      canvas.addEventListener('pointerdown', handlePointerMove);
+      canvas.addEventListener('pointermove', handlePointerMove);
+      canvas.addEventListener('pointerup', handleCanvasClick);
 
       initGyroscope();
     }
@@ -456,23 +455,22 @@
     }
 
     let currentMouseX = 180;
-    function handleCanvasMouseMove(e) {
+    
+    // 💡 포인터 이동 & 터치 위치 동기화
+    function handlePointerMove(e) {
       const rect = canvas.getBoundingClientRect();
       currentMouseX = e.clientX - rect.left;
     }
-    function handleTouchMove(e) {
-      if (e.touches.length > 0) {
-        const rect = canvas.getBoundingClientRect();
-        currentMouseX = e.touches[0].clientX - rect.left;
-      }
-    }
 
+    // 💡 클릭 & 터치 끝났을 때의 동작 (아이템 소모 방해 차단)
     function handleCanvasClick(e) {
       if (isGameOver) return;
+      
       const rect = canvas.getBoundingClientRect();
-      const clickX = (e.clientX || (e.changedTouches && e.changedTouches[0].clientX)) - rect.left;
-      const clickY = (e.clientY || (e.changedTouches && e.changedTouches[0].clientY)) - rect.top;
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
 
+      // 아이템(뿅망치) 사용 중일 때 무조건 여기서 멈춤 (구슬 안 떨어짐)
       if (isHammerActive) {
         const bodies = Composite.allBodies(engine.world);
         const clickedBody = bodies.find(b => {
@@ -487,9 +485,10 @@
           if (itemCounts.hammer === 0) document.getElementById('btn-hammer').disabled = true;
           toggleHammer();
         }
-        return;
+        return; 
       }
 
+      // 아이템(클린폭탄) 사용 중일 때 무조건 여기서 멈춤 (구슬 안 떨어짐)
       if (isBombActive) {
         const bodies = Composite.allBodies(engine.world);
         const BOMB_RADIUS = 100;
@@ -508,10 +507,12 @@
         document.getElementById('cnt-bomb').innerText = `${itemCounts.bomb}회`;
         if (itemCounts.bomb === 0) document.getElementById('btn-bomb').disabled = true;
         toggleCleanBomb();
-        return;
+        return; 
       }
 
+      // 아이템 비활성화일 때만 구슬 떨어짐
       if (!canDrop) return;
+      
       const fruit = FRUITS[currentFruitLevel];
       const dropX = Math.max(fruit.radius + 10, Math.min(350 - fruit.radius, clickX));
       const body = Bodies.circle(dropX, 40, fruit.radius, {
