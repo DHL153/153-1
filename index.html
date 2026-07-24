@@ -73,7 +73,7 @@
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       cursor: crosshair;
-      touch-action: none;
+      touch-action: none; 
     }
 
     #warning-banner {
@@ -122,7 +122,7 @@
       align-items: center;
       gap: 3px;
       outline: none;
-      -webkit-tap-highlight-color: transparent;
+      -webkit-tap-highlight-color: transparent; 
     }
 
     @media (hover: hover) and (pointer: fine) {
@@ -154,6 +154,17 @@
       background: rgba(0,0,0,0.4);
       padding: 1px 5px;
       border-radius: 8px;
+    }
+
+    /* 💡 타이머 표시용 CSS 추가 */
+    .timer {
+      font-size: 9px;
+      color: #00ffcc;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 1px 5px;
+      border-radius: 8px;
+      display: none; /* 기본적으로 숨김 */
+      font-weight: bold;
     }
 
     @keyframes pulse {
@@ -233,13 +244,14 @@
       </button>
       <button class="item-btn" id="btn-tilt" onclick="useGravityTilt()">
         ⚖️ 중력 틸트
+        <!-- 💡 남은 횟수와 타이머가 교체되도록 span 추가 -->
         <span class="count" id="cnt-tilt">10회</span>
+        <span class="timer" id="timer-tilt">5.0s</span>
       </button>
     </div>
   </div>
 
   <script>
-    // 💡 Sleeping 모듈 추가 (떨림 방지의 핵심)
     const { Engine, Render, Runner, Bodies, Composite, Events, Body, Sleeping } = Matter;
 
     let engine, render, runner;
@@ -252,8 +264,9 @@
     let isHammerActive = false;
     let isBombActive = false;
     let isTiltActive = false;
-    let tiltTimer = null;
     
+    // 💡 틸트 관련 변수 수정 (setTimeout 제거, 남은 시간 밀리초 단위 추적)
+    let tiltRemainingTime = 0; 
     let lastActionTime = 0; 
 
     const itemCounts = { next: 10, hammer: 10, bomb: 10, shake: 10, tilt: 10 };
@@ -288,14 +301,12 @@
     }
 
     function init() {
-      // 💡 떨림 방지를 위한 엔진 최적화
       engine = Engine.create({
-        enableSleeping: true // 멈춘 구슬을 재워서 부들부들 떠는 현상 완벽 제거
+        enableSleeping: true 
       });
       engine.gravity.x = 0;
       engine.gravity.y = 1.2;
       
-      // 겹쳐진 구슬들을 부드럽게 밀어내도록 물리 연산 정밀도 대폭 상향
       engine.positionIterations = 10; 
       engine.velocityIterations = 10; 
 
@@ -360,8 +371,28 @@
 
       const ctx = render.context;
 
-      // 물리 엔진의 불필요한 깨어남 방지를 위해, 값이 다를 때만 0으로 초기화
-      if (!isTiltActive) {
+      // 💡 틸트 활성화 시 타이머 처리 로직
+      if (isTiltActive) {
+        tiltRemainingTime -= dt;
+        
+        if (tiltRemainingTime > 0) {
+          // 남은 시간 텍스트 실시간 업데이트 (0.1초 단위)
+          document.getElementById('timer-tilt').innerText = (tiltRemainingTime / 1000).toFixed(1) + 's';
+        } else {
+          // 타이머 0초 도달 시 틸트 완전 종료
+          isTiltActive = false;
+          engine.gravity.x = 0;
+          engine.gravity.y = 1.2;
+          
+          const btn = document.getElementById('btn-tilt');
+          btn.classList.remove('active');
+          btn.blur();
+          
+          // UI 원상 복구 (타이머 숨기고 횟수 노출)
+          document.getElementById('timer-tilt').style.display = 'none';
+          document.getElementById('cnt-tilt').style.display = 'inline-block';
+        }
+      } else {
         if (engine.gravity.x !== 0) engine.gravity.x = 0;
         if (engine.gravity.y !== 1.2) engine.gravity.y = 1.2;
       }
@@ -616,7 +647,6 @@
       const bodies = Composite.allBodies(engine.world);
       bodies.forEach(b => {
         if (!b.isStatic) {
-          // 💡 자고 있던 구슬을 강제로 깨워서 폭발적으로 튀어오르게 만듦
           Sleeping.set(b, false);
           Body.setVelocity(b, { x: (Math.random() - 0.5) * 28, y: -Math.random() * 18 - 8 });
           Body.setAngularVelocity(b, (Math.random() - 0.5) * 0.4);
@@ -638,21 +668,21 @@
       if (itemCounts.tilt === 0) document.getElementById('btn-tilt').disabled = true;
 
       isTiltActive = true;
+      tiltRemainingTime = 5000; // 💡 5초 카운트다운 할당
+      
       const btn = document.getElementById('btn-tilt');
       btn.classList.add('active'); 
 
-      // 💡 틸트 활성화 시 자고 있는 모든 구슬을 깨움
+      // UI 변경 (횟수 숨기기, 타이머 텍스트 띄우기)
+      document.getElementById('cnt-tilt').style.display = 'none';
+      const timerSpan = document.getElementById('timer-tilt');
+      timerSpan.style.display = 'inline-block';
+      timerSpan.innerText = '5.0s';
+
       const bodies = Composite.allBodies(engine.world);
       bodies.forEach(b => {
         if (!b.isStatic) Sleeping.set(b, false);
       });
-
-      if (tiltTimer) clearTimeout(tiltTimer);
-      tiltTimer = setTimeout(() => {
-        isTiltActive = false;
-        btn.classList.remove('active');
-        btn.blur();
-      }, 5000);
 
       addScore(20);
     }
@@ -669,7 +699,6 @@
               deltaBeta = Math.max(-45, Math.min(45, deltaBeta)); 
               engine.gravity.y = 1.2 + (deltaBeta / 45) * 1.5;
               
-              // 💡 기울임에 실시간 반응하도록 자고 있는 구슬을 다시 깨움
               const bodies = Composite.allBodies(engine.world);
               bodies.forEach(b => {
                 if (!b.isStatic) Sleeping.set(b, false);
@@ -699,7 +728,7 @@
     function triggerGameOver() {
       isGameOver = true;
       isTiltActive = false;
-      if (tiltTimer) clearTimeout(tiltTimer);
+      tiltRemainingTime = 0;
       engine.gravity.x = 0;
       engine.gravity.y = 1.2;
       
@@ -709,6 +738,10 @@
       shakeBtn.classList.remove('active');
       tiltBtn.blur();
       shakeBtn.blur();
+      
+      // 타이머 원상복구
+      document.getElementById('timer-tilt').style.display = 'none';
+      document.getElementById('cnt-tilt').style.display = 'inline-block';
 
       document.getElementById('final-score').innerText = score;
       document.getElementById('game-over').style.display = 'flex';
@@ -720,7 +753,7 @@
       score = 0;
       isGameOver = false;
       isTiltActive = false;
-      if (tiltTimer) clearTimeout(tiltTimer);
+      tiltRemainingTime = 0;
       engine.gravity.x = 0;
       engine.gravity.y = 1.2;
       lastTime = Date.now();
@@ -729,6 +762,10 @@
       document.getElementById('score').innerText = '0';
       document.getElementById('game-over').style.display = 'none';
       document.getElementById('warning-banner').style.display = 'none';
+      
+      // 타이머 원상복구
+      document.getElementById('timer-tilt').style.display = 'none';
+      document.getElementById('cnt-tilt').style.display = 'inline-block';
       
       Object.keys(itemCounts).forEach(k => itemCounts[k] = 10);
       document.querySelectorAll('.item-btn').forEach(btn => {
