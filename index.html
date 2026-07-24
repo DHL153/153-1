@@ -120,9 +120,11 @@
       flex-direction: column;
       align-items: center;
       gap: 3px;
+      /* 모바일 포커스 잔상 완벽 제거 옵션 */
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    /* 모바일 터치 고정 버그 해결을 위해 hover와 active 엄격 분리 */
     @media (hover: hover) {
       .item-btn:hover:not(:disabled):not(.active) {
         background: #ff70a6;
@@ -343,7 +345,6 @@
 
       const ctx = render.context;
 
-      // 🔴 가장 중요한 핵심 락(Lock)! 틸트 아이템이 비활성화 시 중력을 무조건 기본값으로 고정 (센서 간섭 완전 차단)
       if (!isTiltActive) {
         engine.gravity.x = 0;
         engine.gravity.y = 1.2;
@@ -558,13 +559,16 @@
       nextFruitLevel = temp;
       updateNextCanvas();
       addScore(10);
+      document.getElementById('btn-next').blur(); // 클릭 후 포커스 해제
     }
 
     function toggleHammer() {
       if (itemCounts.hammer <= 0 && !isHammerActive) return;
       if (isBombActive) toggleCleanBomb();
       isHammerActive = !isHammerActive;
-      document.getElementById('btn-hammer').classList.toggle('active', isHammerActive);
+      const btn = document.getElementById('btn-hammer');
+      btn.classList.toggle('active', isHammerActive);
+      if (!isHammerActive) btn.blur(); // 비활성화 시 포커스 해제
       canvas.style.cursor = isHammerActive ? 'pointer' : 'crosshair';
     }
 
@@ -572,11 +576,13 @@
       if (itemCounts.bomb <= 0 && !isBombActive) return;
       if (isHammerActive) toggleHammer();
       isBombActive = !isBombActive;
-      document.getElementById('btn-bomb').classList.toggle('active', isBombActive);
+      const btn = document.getElementById('btn-bomb');
+      btn.classList.toggle('active', isBombActive);
+      if (!isBombActive) btn.blur(); // 비활성화 시 포커스 해제
       canvas.style.cursor = isBombActive ? 'pointer' : 'crosshair';
     }
 
-    // 🫨 쉐이크 (CSS 최적화 및 강제 초기화 연동)
+    // 🫨 쉐이크 (종료 시 blur 강제 호출 추가)
     function useShake() {
       if (itemCounts.shake <= 0) return;
       itemCounts.shake--;
@@ -584,7 +590,7 @@
       if (itemCounts.shake === 0) document.getElementById('btn-shake').disabled = true;
 
       const btn = document.getElementById('btn-shake');
-      btn.classList.add('active'); // 불빛 켜짐
+      btn.classList.add('active');
 
       const bodies = Composite.allBodies(engine.world);
       bodies.forEach(b => {
@@ -595,13 +601,13 @@
       });
       addScore(20);
 
-      // 0.5초 뒤 반드시 버튼 비활성화
       setTimeout(() => {
         btn.classList.remove('active'); 
+        btn.blur(); // 모바일 포커스 강제 해제
       }, 500);
     }
 
-    // ⚖️ 중력 틸트 (5초 후 완전 차단되도록 설계)
+    // ⚖️ 중력 틸트 (종료 시 blur 강제 호출 추가)
     function useGravityTilt() {
       if (itemCounts.tilt <= 0 || isTiltActive) return;
       
@@ -611,32 +617,26 @@
 
       isTiltActive = true;
       const btn = document.getElementById('btn-tilt');
-      btn.classList.add('active'); // 불빛 켜짐
+      btn.classList.add('active'); 
 
-      // 5초간만 작동 후 모두 리셋
       if (tiltTimer) clearTimeout(tiltTimer);
       tiltTimer = setTimeout(() => {
-        isTiltActive = false; // 플래그를 false로 돌리면 gameLoop에서 즉각 강제 0점 처리됨
+        isTiltActive = false;
         btn.classList.remove('active');
+        btn.blur(); // 모바일 포커스 강제 해제
       }, 5000);
 
       addScore(20);
     }
 
-    // 자이로센서 감지 (상하 + 좌우 동시 연동)
     function initGyroscope() {
       if (window.DeviceOrientationEvent) {
         window.addEventListener('deviceorientation', (e) => {
-          // 아이템 활성화 시에만 데이터 받아오기
           if (isTiltActive && !isGameOver) {
             if (e.gamma !== null && e.beta !== null) {
-              
-              // [좌/우] X축 기울기 (-45 ~ 45 맵핑)
               const tiltX = Math.max(-45, Math.min(45, e.gamma));
               engine.gravity.x = (tiltX / 45) * 1.5;
 
-              // [상/하] Y축 기울기 (스마트폰을 약 45도 기울여서 보는 상태를 기본 중력 1.2로 가정)
-              // 45도를 기준으로 차이값(delta)을 구하여 눕히면 0에 수렴(둥둥 뜸), 세우면 증가(무거워짐)
               let deltaBeta = e.beta - 45;
               deltaBeta = Math.max(-45, Math.min(45, deltaBeta)); 
               engine.gravity.y = 1.2 + (deltaBeta / 45) * 1.5;
@@ -668,8 +668,14 @@
       if (tiltTimer) clearTimeout(tiltTimer);
       engine.gravity.x = 0;
       engine.gravity.y = 1.2;
-      document.getElementById('btn-tilt').classList.remove('active');
-      document.getElementById('btn-shake').classList.remove('active');
+      
+      const tiltBtn = document.getElementById('btn-tilt');
+      const shakeBtn = document.getElementById('btn-shake');
+      tiltBtn.classList.remove('active');
+      shakeBtn.classList.remove('active');
+      tiltBtn.blur();
+      shakeBtn.blur();
+
       document.getElementById('final-score').innerText = score;
       document.getElementById('game-over').style.display = 'flex';
       document.getElementById('warning-banner').style.display = 'none';
@@ -691,6 +697,7 @@
       document.querySelectorAll('.item-btn').forEach(btn => {
         btn.disabled = false;
         btn.classList.remove('active');
+        btn.blur();
       });
       document.getElementById('cnt-next').innerText = '10회';
       document.getElementById('cnt-hammer').innerText = '10회';
