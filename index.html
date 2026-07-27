@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>미소녀 수박 게임</title>
+  <title>미소녀 수박 게임 - 5초 유예 & 자이로 에디션</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     * {
@@ -71,6 +71,9 @@
       height: 100%;
       cursor: crosshair;
       touch-action: none; 
+      /* 💡 배경 음영(그라데이션 및 입체감) 추가 */
+      background: radial-gradient(circle at 50% 25%, #ffffff 0%, #ffebf0 35%, #ffb3cb 100%);
+      box-shadow: inset 0 0 20px rgba(255, 71, 126, 0.3);
     }
 
     #warning-banner {
@@ -318,7 +321,8 @@
       render = Render.create({
         canvas: canvas,
         engine: engine,
-        options: { width: 360, height: 520, wireframes: false, background: '#2b2b36', pixelRatio: 1 }
+        // 💡 CSS 그라데이션 음영이 통과해 보이도록 물리 엔진 렌더러 배경을 투명하게 설정
+        options: { width: 360, height: 520, wireframes: false, background: 'transparent', pixelRatio: 1 }
       });
 
       Render.run(render);
@@ -346,13 +350,12 @@
     }
 
     function setupWalls() {
-      // 💡 버그 수정 1: 벽면 두께를 기존 10에서 200으로 크게 늘려 고속 이동 시 화면 밖 탈출(터널링) 완벽 방지
       const wallOptions = { isStatic: true, friction: 0, render: { visible: false } };
       Composite.add(engine.world, [
-        Bodies.rectangle(-90, 260, 200, 1520, wallOptions), // 좌측 벽 (두께 200)
-        Bodies.rectangle(450, 260, 200, 1520, wallOptions), // 우측 벽 (두께 200)
-        Bodies.rectangle(180, 610, 360, 200, wallOptions),  // 하단 바닥 (두께 200)
-        Bodies.rectangle(180, -1000, 360, 200, wallOptions) // 상단 천장
+        Bodies.rectangle(-90, 260, 200, 1520, wallOptions), 
+        Bodies.rectangle(450, 260, 200, 1520, wallOptions), 
+        Bodies.rectangle(180, 610, 360, 200, wallOptions),  
+        Bodies.rectangle(180, -1000, 360, 200, wallOptions) 
       ]);
     }
 
@@ -421,11 +424,13 @@
       }
 
       ctx.beginPath();
+      ctx.setLineDash([6, 6]); 
       ctx.moveTo(0, DEADLINE_Y);
       ctx.lineTo(360, DEADLINE_Y);
-      ctx.strokeStyle = deadlineOverTime > 0 ? '#ff0055' : 'rgba(255, 112, 166, 0.6)';
-      ctx.lineWidth = deadlineOverTime > 0 ? 3 : 1;
+      ctx.strokeStyle = deadlineOverTime > 0 ? '#ff0055' : '#ff70a6'; 
+      ctx.lineWidth = deadlineOverTime > 0 ? 3 : 2;
       ctx.stroke();
+      ctx.setLineDash([]); 
 
       if (!isGameOver) checkDeadlineGraceSystem(dt, now);
     }
@@ -586,7 +591,6 @@
       event.pairs.forEach(pair => {
         const { bodyA, bodyB } = pair;
         
-        // 💡 버그 수정 2: 이미 하나로 합쳐져서 삭제 처리 예정인 구슬이 중복으로 합쳐지는 것 방지
         if (bodyA.isMerging || bodyB.isMerging) return; 
 
         if (bodyA.customLevel !== undefined && bodyB.customLevel !== undefined) {
@@ -594,7 +598,6 @@
             const currentLvl = bodyA.customLevel;
             if (currentLvl < FRUITS.length - 1) {
               
-              // 💡 삭제 예정 상태로 표시하여 같은 프레임에서 또 계산되지 않도록 락(Lock)
               bodyA.isMerging = true;
               bodyB.isMerging = true;
 
