@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>미소녀 수박 게임</title>
+  <title>미소녀 수박 게임 - 5초 유예 & 자이로 에디션</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <style>
     * {
@@ -310,7 +310,6 @@
       engine.gravity.x = 0;
       engine.gravity.y = 1.2;
       
-      // 💡 움직임 속도 1.5배 (기존 대비 50% 향상)
       engine.timing.timeScale = 1.5; 
       
       engine.positionIterations = 16; 
@@ -347,12 +346,13 @@
     }
 
     function setupWalls() {
+      // 💡 버그 수정 1: 벽면 두께를 기존 10에서 200으로 크게 늘려 고속 이동 시 화면 밖 탈출(터널링) 완벽 방지
       const wallOptions = { isStatic: true, friction: 0, render: { visible: false } };
       Composite.add(engine.world, [
-        Bodies.rectangle(5, -240, 10, 1520, wallOptions),
-        Bodies.rectangle(355, -240, 10, 1520, wallOptions),
-        Bodies.rectangle(180, 515, 360, 10, wallOptions),
-        Bodies.rectangle(180, -1000, 360, 50, wallOptions)
+        Bodies.rectangle(-90, 260, 200, 1520, wallOptions), // 좌측 벽 (두께 200)
+        Bodies.rectangle(450, 260, 200, 1520, wallOptions), // 우측 벽 (두께 200)
+        Bodies.rectangle(180, 610, 360, 200, wallOptions),  // 하단 바닥 (두께 200)
+        Bodies.rectangle(180, -1000, 360, 200, wallOptions) // 상단 천장
       ]);
     }
 
@@ -585,16 +585,26 @@
     function handleCollision(event) {
       event.pairs.forEach(pair => {
         const { bodyA, bodyB } = pair;
+        
+        // 💡 버그 수정 2: 이미 하나로 합쳐져서 삭제 처리 예정인 구슬이 중복으로 합쳐지는 것 방지
+        if (bodyA.isMerging || bodyB.isMerging) return; 
+
         if (bodyA.customLevel !== undefined && bodyB.customLevel !== undefined) {
           if (bodyA.customLevel === bodyB.customLevel) {
             const currentLvl = bodyA.customLevel;
             if (currentLvl < FRUITS.length - 1) {
+              
+              // 💡 삭제 예정 상태로 표시하여 같은 프레임에서 또 계산되지 않도록 락(Lock)
+              bodyA.isMerging = true;
+              bodyB.isMerging = true;
+
               const newLvl = currentLvl + 1;
               const midX = (bodyA.position.x + bodyB.position.x) / 2;
               const midY = (bodyA.position.y + bodyB.position.y) / 2;
-              Composite.remove(engine.world, [bodyA, bodyB]);
-              const newFruit = FRUITS[newLvl];
               
+              Composite.remove(engine.world, [bodyA, bodyB]);
+              
+              const newFruit = FRUITS[newLvl];
               const mergedBody = Bodies.circle(midX, midY, newFruit.radius, {
                 restitution: 0.2, 
                 friction: 0.02, 
@@ -602,6 +612,7 @@
                 spawnTime: Date.now(), 
                 render: { visible: false }
               });
+              
               Composite.add(engine.world, mergedBody);
               addScore((newLvl + 1) * 2);
             }
@@ -655,7 +666,6 @@
       const bodies = Composite.allBodies(engine.world);
       bodies.forEach(b => {
         if (!b.isStatic) {
-          // 💡 쉐이크 반동 1.5배 상향 (가속도 및 회전력 증가)
           Body.setVelocity(b, { 
             x: (Math.random() - 0.5) * 42, 
             y: -Math.random() * 27 - 12 
@@ -679,7 +689,6 @@
       if (itemCounts.tilt === 0) document.getElementById('btn-tilt').disabled = true;
 
       isTiltActive = true;
-      // 💡 틸트 지속 시간 7초(7000ms)로 변경
       tiltRemainingTime = 7000; 
       
       const btn = document.getElementById('btn-tilt');
