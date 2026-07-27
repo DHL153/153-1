@@ -58,7 +58,6 @@
       border-radius: 50%;
       border: 2px solid #ff70a6;
       background-color: #fff;
-      /* 💡 고해상도 이미지 축소 시 깨짐 방지를 위해 pixelated 제거 */
     }
 
     #canvas-wrapper {
@@ -72,7 +71,6 @@
       height: 100%;
       cursor: crosshair;
       touch-action: none; 
-      /* 💡 여기도 crisp-edges, pixelated 제거하여 부드럽게 렌더링되게 함 */
     }
 
     #warning-banner {
@@ -243,13 +241,13 @@
       <button class="item-btn" id="btn-tilt" onclick="useGravityTilt()">
         ⚖️ 중력 틸트
         <span class="count" id="cnt-tilt">10회</span>
-        <span class="timer" id="timer-tilt">5.0s</span>
+        <span class="timer" id="timer-tilt">7.0s</span>
       </button>
     </div>
   </div>
 
   <script>
-    const { Engine, Render, Runner, Bodies, Composite, Events, Body, Sleeping } = Matter;
+    const { Engine, Render, Runner, Bodies, Composite, Events, Body } = Matter;
 
     let engine, render, runner;
     let score = 0;
@@ -287,15 +285,12 @@
       { radius: 144, name: 'Lv10' }
     ];
 
-    // 💡 10개의 512x512 이미지를 미리 메모리에 로드해둡니다.
     const preloadedImages = [];
     for (let i = 1; i <= 10; i++) {
       const img = new Image();
-      const numStr = String(i).padStart(2, '0'); // 01, 02... 10
+      const numStr = String(i).padStart(2, '0');
       img.src = `images/lv${numStr}.png`;
       preloadedImages.push(img);
-      
-      // 이미지가 로드될 때마다 넥스트 캔버스 업데이트 (첫 로딩 시 늦게 뜰 수 있음 방지)
       img.onload = () => updateNextCanvas();
     }
 
@@ -310,13 +305,16 @@
 
     function init() {
       engine = Engine.create({
-        enableSleeping: true 
+        enableSleeping: false 
       });
       engine.gravity.x = 0;
       engine.gravity.y = 1.2;
       
-      engine.positionIterations = 10; 
-      engine.velocityIterations = 10; 
+      // 💡 움직임 속도 1.5배 (기존 대비 50% 향상)
+      engine.timing.timeScale = 1.5; 
+      
+      engine.positionIterations = 16; 
+      engine.velocityIterations = 16; 
 
       render = Render.create({
         canvas: canvas,
@@ -349,7 +347,7 @@
     }
 
     function setupWalls() {
-      const wallOptions = { isStatic: true, render: { visible: false } };
+      const wallOptions = { isStatic: true, friction: 0, render: { visible: false } };
       Composite.add(engine.world, [
         Bodies.rectangle(5, -240, 10, 1520, wallOptions),
         Bodies.rectangle(355, -240, 10, 1520, wallOptions),
@@ -364,7 +362,6 @@
       nextCtx.clearRect(0, 0, 38, 38);
       const img = preloadedImages[nextFruitLevel];
       
-      // 이미지가 로드된 경우에만 넥스트 캔버스에 그립니다.
       if (img && img.complete) {
         const drawRadius = 14; 
         const drawSize = drawRadius * 2;
@@ -417,7 +414,6 @@
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // 💡 대기 중인 구슬을 이미지로 렌더링
         if (img && img.complete) {
           const drawSize = fruit.radius * 2;
           ctx.drawImage(img, mouseX - fruit.radius, 35 - fruit.radius, drawSize, drawSize);
@@ -447,7 +443,6 @@
           ctx.translate(pos.x, pos.y);
           ctx.rotate(angle);
 
-          // 💡 게임 영역의 구슬을 이미지로 렌더링
           if (img && img.complete) {
             const drawSize = fruit.radius * 2;
             ctx.drawImage(img, -fruit.radius, -fruit.radius, drawSize, drawSize);
@@ -523,10 +518,6 @@
           document.getElementById('cnt-hammer').innerText = `${itemCounts.hammer}회`;
           if (itemCounts.hammer === 0) document.getElementById('btn-hammer').disabled = true;
           toggleHammer();
-
-          bodies.forEach(b => {
-            if (!b.isStatic) Sleeping.set(b, false);
-          });
         }
         return; 
       }
@@ -542,7 +533,6 @@
         if (clickedBody) {
           lastActionTime = now; 
           const targetLevel = clickedBody.customLevel;
-          
           const targets = bodies.filter(b => !b.isStatic && b.customLevel === targetLevel);
           
           let gainedScore = 0;
@@ -559,15 +549,10 @@
           });
           
           addScore(gainedScore);
-          
           itemCounts.bomb--;
           document.getElementById('cnt-bomb').innerText = `${itemCounts.bomb}회`;
           if (itemCounts.bomb === 0) document.getElementById('btn-bomb').disabled = true;
           toggleCleanBomb();
-
-          bodies.forEach(b => {
-            if (!b.isStatic) Sleeping.set(b, false);
-          });
         }
         return; 
       }
@@ -577,8 +562,13 @@
       lastActionTime = now; 
       const fruit = FRUITS[currentFruitLevel];
       const dropX = Math.max(fruit.radius + 10, Math.min(350 - fruit.radius, clickX));
+      
       const body = Bodies.circle(dropX, 40, fruit.radius, {
-        restitution: 0.2, friction: 0.1, customLevel: currentFruitLevel, spawnTime: Date.now(), render: { visible: false }
+        restitution: 0.2, 
+        friction: 0.02, 
+        customLevel: currentFruitLevel, 
+        spawnTime: Date.now(), 
+        render: { visible: false }
       });
 
       Composite.add(engine.world, body);
@@ -604,8 +594,13 @@
               const midY = (bodyA.position.y + bodyB.position.y) / 2;
               Composite.remove(engine.world, [bodyA, bodyB]);
               const newFruit = FRUITS[newLvl];
+              
               const mergedBody = Bodies.circle(midX, midY, newFruit.radius, {
-                restitution: 0.2, friction: 0.1, customLevel: newLvl, spawnTime: Date.now(), render: { visible: false }
+                restitution: 0.2, 
+                friction: 0.02, 
+                customLevel: newLvl, 
+                spawnTime: Date.now(), 
+                render: { visible: false }
               });
               Composite.add(engine.world, mergedBody);
               addScore((newLvl + 1) * 2);
@@ -660,9 +655,12 @@
       const bodies = Composite.allBodies(engine.world);
       bodies.forEach(b => {
         if (!b.isStatic) {
-          Sleeping.set(b, false);
-          Body.setVelocity(b, { x: (Math.random() - 0.5) * 28, y: -Math.random() * 18 - 8 });
-          Body.setAngularVelocity(b, (Math.random() - 0.5) * 0.4);
+          // 💡 쉐이크 반동 1.5배 상향 (가속도 및 회전력 증가)
+          Body.setVelocity(b, { 
+            x: (Math.random() - 0.5) * 42, 
+            y: -Math.random() * 27 - 12 
+          });
+          Body.setAngularVelocity(b, (Math.random() - 0.5) * 0.6);
         }
       });
       addScore(20);
@@ -681,7 +679,8 @@
       if (itemCounts.tilt === 0) document.getElementById('btn-tilt').disabled = true;
 
       isTiltActive = true;
-      tiltRemainingTime = 5000; 
+      // 💡 틸트 지속 시간 7초(7000ms)로 변경
+      tiltRemainingTime = 7000; 
       
       const btn = document.getElementById('btn-tilt');
       btn.classList.add('active'); 
@@ -689,12 +688,7 @@
       document.getElementById('cnt-tilt').style.display = 'none';
       const timerSpan = document.getElementById('timer-tilt');
       timerSpan.style.display = 'inline-block';
-      timerSpan.innerText = '5.0s';
-
-      const bodies = Composite.allBodies(engine.world);
-      bodies.forEach(b => {
-        if (!b.isStatic) Sleeping.set(b, false);
-      });
+      timerSpan.innerText = '7.0s';
 
       addScore(20);
     }
@@ -710,11 +704,6 @@
               let deltaBeta = e.beta - 45;
               deltaBeta = Math.max(-45, Math.min(45, deltaBeta)); 
               engine.gravity.y = 1.2 + (deltaBeta / 45) * 1.5;
-              
-              const bodies = Composite.allBodies(engine.world);
-              bodies.forEach(b => {
-                if (!b.isStatic) Sleeping.set(b, false);
-              });
             }
           }
         });
